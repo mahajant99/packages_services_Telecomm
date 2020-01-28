@@ -16,7 +16,6 @@
 
 package com.android.server.telecom;
 
-import android.content.Context;
 import android.os.SystemProperties;
 
 import android.telecom.Connection;
@@ -24,8 +23,6 @@ import android.telecom.DisconnectCause;
 import android.telecom.Logging.EventManager;
 import android.telecom.ParcelableCallAnalytics;
 import android.telecom.TelecomAnalytics;
-import android.telephony.SubscriptionInfo;
-import android.telephony.SubscriptionManager;
 import android.util.Base64;
 import android.telecom.Log;
 
@@ -40,12 +37,10 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.stream.Collectors;
@@ -633,7 +628,7 @@ public class Analytics {
         return new TelecomAnalytics(sessionTimings, calls);
     }
 
-    public static void dumpToEncodedProto(Context context, PrintWriter pw, String[] args) {
+    public static void dumpToEncodedProto(PrintWriter pw, String[] args) {
         TelecomLogClass.TelecomLog result = new TelecomLogClass.TelecomLog();
 
         synchronized (sLock) {
@@ -647,7 +642,6 @@ public class Analytics {
                             .setTimeMillis(timing.getTime()))
                     .toArray(TelecomLogClass.LogSessionTiming[]::new);
             result.setHardwareRevision(SystemProperties.get("ro.boot.revision", ""));
-            result.setCarrierId(getCarrierId(context));
             if (args.length > 1 && CLEAR_ANALYTICS_ARG.equals(args[1])) {
                 sCallIdToInfo.clear();
                 sSessionTimings.clear();
@@ -656,29 +650,6 @@ public class Analytics {
         String encodedProto = Base64.encodeToString(
                 TelecomLogClass.TelecomLog.toByteArray(result), Base64.DEFAULT);
         pw.write(encodedProto);
-    }
-
-    private static int getCarrierId(Context context) {
-        SubscriptionManager subscriptionManager =
-                context.getSystemService(SubscriptionManager.class);
-        List<SubscriptionInfo> subInfos = subscriptionManager.getActiveSubscriptionInfoList();
-        if (subInfos == null) {
-            return -1;
-        }
-        return subInfos.stream()
-                .max(Comparator.comparing(Analytics::scoreSubscriptionInfo))
-                .map(SubscriptionInfo::getCarrierId).orElse(-1);
-    }
-
-    // Copied over from Telephony's server-side logic for consistency
-    private static int scoreSubscriptionInfo(SubscriptionInfo subInfo) {
-        final int scoreCarrierId = 0b100;
-        final int scoreNotOpportunistic = 0b010;
-        final int scoreSlot0 = 0b001;
-
-        return ((subInfo.getCarrierId() >= 0) ? scoreCarrierId : 0)
-                + (subInfo.isOpportunistic() ? 0 : scoreNotOpportunistic)
-                + ((subInfo.getSimSlotIndex() == 0) ? scoreSlot0 : 0);
     }
 
     public static void dump(IndentingPrintWriter writer) {
